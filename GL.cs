@@ -19,7 +19,11 @@ internal static class GL
     public const uint GL_DEPTH_BUFFER_BIT = 0x00000100;
     public const uint GL_DEPTH_TEST = 0x0B71;
     public const uint GL_CULL_FACE = 0x0B44;
+    public const uint GL_BLEND = 0x0BE2;
     public const uint GL_BACK = 0x0405;
+    public const uint GL_FRONT = 0x0404;
+    public const uint GL_SRC_ALPHA = 0x0302;
+    public const uint GL_ONE_MINUS_SRC_ALPHA = 0x0303;
 
     public const uint GL_TEXTURE0 = 0x84C0;
     public const uint GL_TEXTURE1 = 0x84C1;
@@ -63,6 +67,7 @@ internal static class GL
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] public delegate int glGetUniformLocationProc(uint program, [MarshalAs(UnmanagedType.LPStr)] string name);
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] public delegate void glUniformMatrix4fvProc(int location, int count, byte transpose, IntPtr value);
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] public delegate void glUniform1iProc(int location, int v0);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] public delegate void glUniform1fProc(int location, float v0);
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] public delegate void glUniform3fProc(int location, float v0, float v1, float v2);
 
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] public delegate void glActiveTextureProc(uint texture);
@@ -93,6 +98,7 @@ internal static class GL
     public static glGetUniformLocationProc _GetUniformLocation = null!;
     public static glUniformMatrix4fvProc _UniformMatrix4fv = null!;
     public static glUniform1iProc _Uniform1i = null!;
+    public static glUniform1fProc _Uniform1f = null!;
     public static glUniform3fProc _Uniform3f = null!;
     public static glActiveTextureProc _ActiveTexture = null!;
     public static glGenerateMipmapProc _GenerateMipmap = null!;
@@ -101,7 +107,10 @@ internal static class GL
     [DllImport("opengl32.dll")] public static extern void glClear(uint mask);
     [DllImport("opengl32.dll")] public static extern void glViewport(int x, int y, int w, int h);
     [DllImport("opengl32.dll")] public static extern void glEnable(uint cap);
+    [DllImport("opengl32.dll")] public static extern void glDisable(uint cap);
     [DllImport("opengl32.dll")] public static extern void glCullFace(uint mode);
+    [DllImport("opengl32.dll")] public static extern void glBlendFunc(uint sfactor, uint dfactor);
+    [DllImport("opengl32.dll")] public static extern void glDepthMask(byte flag);
     [DllImport("opengl32.dll")] public static extern void glDrawArrays(uint mode, int first, int count);
     [DllImport("opengl32.dll")] public static extern void glGenTextures(int n, out uint textures);
     [DllImport("opengl32.dll")] public static extern void glDeleteTextures(int n, ref uint textures);
@@ -131,6 +140,8 @@ internal static class GL
     public static int GetUniformLocation(uint program, string name) => _GetUniformLocation(program, name);
     public static void UniformMatrix4fv(int location, int count, bool transpose, IntPtr value) => _UniformMatrix4fv(location, count, transpose ? (byte)1 : (byte)0, value);
     public static void Uniform1i(int location, int v0) => _Uniform1i(location, v0);
+    public static void Uniform1f(int location, float v0) => _Uniform1f(location, v0);
+    public static void Uniform1fSafe(int location, float v0) { if (location >= 0) _Uniform1f(location, v0); }
     public static void Uniform3f(int location, float x, float y, float z) => _Uniform3f(location, x, y, z);
     public static void ActiveTexture(uint tex) => _ActiveTexture(tex);
     public static void GenerateMipmap(uint target) => _GenerateMipmap(target);
@@ -138,7 +149,10 @@ internal static class GL
     public static void Clear(uint mask) => glClear(mask);
     public static void Viewport(int x, int y, int w, int h) => glViewport(x, y, w, h);
     public static void Enable(uint cap) => glEnable(cap);
+    public static void Disable(uint cap) => glDisable(cap);
     public static void CullFace(uint mode) => glCullFace(mode);
+    public static void BlendFunc(uint sfactor, uint dfactor) => glBlendFunc(sfactor, dfactor);
+    public static void DepthMask(bool flag) => glDepthMask(flag ? (byte)1 : (byte)0);
     public static void DrawArrays(uint mode, int first, int count) => glDrawArrays(mode, first, count);
     public static void GenTextures(int n, out uint textures) => glGenTextures(n, out textures);
     public static void DeleteTextures(int n, ref uint textures) => glDeleteTextures(n, ref textures);
@@ -174,6 +188,7 @@ internal static class GL
         _GetUniformLocation = Load<glGetUniformLocationProc>("glGetUniformLocation");
         _UniformMatrix4fv = Load<glUniformMatrix4fvProc>("glUniformMatrix4fv");
         _Uniform1i = Load<glUniform1iProc>("glUniform1i");
+        _Uniform1f = Load<glUniform1fProc>("glUniform1f");
         _Uniform3f = Load<glUniform3fProc>("glUniform3f");
         _ActiveTexture = Load<glActiveTextureProc>("glActiveTexture");
         _GenerateMipmap = Load<glGenerateMipmapProc>("glGenerateMipmap");

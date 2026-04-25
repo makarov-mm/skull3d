@@ -22,7 +22,7 @@ void main()
     vec3 N = normalize(normalMatrix * aNormal);
     vec3 T = normalize(normalMatrix * aTangent);
     T = normalize(T - dot(T, N) * N);
-    vec3 B = cross(N, T);
+    vec3 B = normalize(cross(N, T));
 
     vUV = aUV;
     vWorldPos = worldPos;

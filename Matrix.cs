@@ -41,6 +41,15 @@ public struct Mat4
         return r;
     }
 
+    public static Mat4 Scale(float x, float y, float z)
+    {
+        var r = Identity();
+        r.M[0] = x;
+        r.M[5] = y;
+        r.M[10] = z;
+        return r;
+    }
+
     public static Mat4 RotationX(float a)
     {
         var r = Identity();

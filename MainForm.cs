@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using Timer = System.Windows.Forms.Timer;
 
@@ -7,6 +8,8 @@ namespace Skull3d;
 
 public sealed class MainForm : Form
 {
+    private const float FloorY = -18.0f;
+
     private readonly Timer _timer;
 
     private IntPtr _hdc;
@@ -20,30 +23,44 @@ public sealed class MainForm : Form
     private float _rotY = 0.0f;
     private float _autoRotY = 0.0f;
     private float _zoom = 70f;
+    private bool _autoRotate = true;
+    private bool _effectsEnabled = true;
+    private bool _mirrorEnabled = true;
 
     private long _lastTicks;
+    private float _time;
 
     private uint _vao;
     private uint _vbo;
+    private uint _floorVao;
+    private uint _floorVbo;
     private uint _program;
 
     private ObjMesh _mesh;
     private uint _diffuseTexture;
+    private uint _normalTexture;
 
     private int _uModel = -1;
     private int _uView = -1;
     private int _uProj = -1;
     private int _uDiffuse = -1;
+    private int _uNormalMap = -1;
     private int _uLightDir = -1;
     private int _uViewPos = -1;
+    private int _uTime = -1;
+    private int _uEffectMix = -1;
+    private int _uObjectAlpha = -1;
+    private int _uFloorY = -1;
+    private int _uRenderMode = -1;
+    private int _uMirrorPass = -1;
 
     private static bool _lightDirIncreasing;
     private static float _lightDirX = -2.0f;
 
     public MainForm()
     {
-        Text = "WinForms + OpenGL Core";
-        ClientSize = new Size(800, 800);
+        Text = "Skull3d - OpenGL 4 Effects Demo";
+        ClientSize = new Size(900, 850);
         StartPosition = FormStartPosition.CenterScreen;
         KeyPreview = true;
 
@@ -114,8 +131,31 @@ public sealed class MainForm : Form
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.Escape)
-            Close();
+        switch (e.KeyCode)
+        {
+            case Keys.Escape:
+                Close();
+                break;
+
+            case Keys.Space:
+                _autoRotate = !_autoRotate;
+                break;
+
+            case Keys.E:
+                _effectsEnabled = !_effectsEnabled;
+                break;
+
+            case Keys.M:
+                _mirrorEnabled = !_mirrorEnabled;
+                break;
+
+            case Keys.R:
+                _rotX = -3.14f / 2;
+                _rotY = 0.0f;
+                _autoRotY = 0.0f;
+                _zoom = 70f;
+                break;
+        }
 
         base.OnKeyDown(e);
     }
@@ -163,7 +203,7 @@ public sealed class MainForm : Form
     protected override void OnMouseWheel(MouseEventArgs e)
     {
         _zoom -= Math.Sign(e.Delta) * 0.35f;
-        _zoom = Math.Clamp(_zoom, 60f, 120f);
+        _zoom = Math.Clamp(_zoom, 50f, 130f);
 
         base.OnMouseWheel(e);
     }
@@ -318,6 +358,7 @@ public sealed class MainForm : Form
     {
         _mesh = ObjLoader.Load(Files.Model);
         _diffuseTexture = Texture.LoadTextureFromFile(Files.TextureDiffuse);
+        _normalTexture = Texture.CreateNormalMapFromFile(Files.TextureDiffuse, strength: 4.5f);
 
         _program = CreateProgram();
 
@@ -325,15 +366,23 @@ public sealed class MainForm : Form
         _uView = GL.GetUniformLocation(_program, "uView");
         _uProj = GL.GetUniformLocation(_program, "uProj");
         _uDiffuse = GL.GetUniformLocation(_program, "uDiffuse");
+        _uNormalMap = GL.GetUniformLocation(_program, "uNormalMap");
         _uLightDir = GL.GetUniformLocation(_program, "uLightDir");
         _uViewPos = GL.GetUniformLocation(_program, "uViewPos");
+        _uTime = GL.GetUniformLocation(_program, "uTime");
+        _uEffectMix = GL.GetUniformLocation(_program, "uEffectMix");
+        _uObjectAlpha = GL.GetUniformLocation(_program, "uObjectAlpha");
+        _uFloorY = GL.GetUniformLocation(_program, "uFloorY");
+        _uRenderMode = GL.GetUniformLocation(_program, "uRenderMode");
+        _uMirrorPass = GL.GetUniformLocation(_program, "uMirrorPass");
 
         CreateObject();
+        CreateFloor();
 
         GL.Enable(GL.GL_DEPTH_TEST);
         GL.Enable(GL.GL_CULL_FACE);
         GL.CullFace(GL.GL_BACK);
-        GL.ClearColor(0.8f, 0.8f, 0.8f, 1.0f);
+        GL.ClearColor(0.015f, 0.017f, 0.022f, 1.0f);
 
         if (WGL.wglSwapIntervalEXT != null)
             WGL.wglSwapIntervalEXT(1);
@@ -342,6 +391,7 @@ public sealed class MainForm : Form
     private void DestroyScene()
     {
         GL.DeleteTextures(1, ref _diffuseTexture);
+        GL.DeleteTextures(1, ref _normalTexture);
 
         if (_vbo != 0)
         {
@@ -353,6 +403,18 @@ public sealed class MainForm : Form
         {
             GL.DeleteVertexArrays(1, ref _vao);
             _vao = 0;
+        }
+
+        if (_floorVbo != 0)
+        {
+            GL.DeleteBuffers(1, ref _floorVbo);
+            _floorVbo = 0;
+        }
+
+        if (_floorVao != 0)
+        {
+            GL.DeleteVertexArrays(1, ref _floorVao);
+            _floorVao = 0;
         }
 
         if (_program != 0)
@@ -404,11 +466,13 @@ public sealed class MainForm : Form
         public float px, py, pz;
         public float u, v;
         public float nx, ny, nz;
+        public float tx, ty, tz;
 
         public Vertex(
             float px, float py, float pz,
             float u, float v,
-            float nx, float ny, float nz)
+            float nx, float ny, float nz,
+            float tx, float ty, float tz)
         {
             this.px = px;
             this.py = py;
@@ -418,17 +482,15 @@ public sealed class MainForm : Form
             this.nx = nx;
             this.ny = ny;
             this.nz = nz;
+            this.tx = tx;
+            this.ty = ty;
+            this.tz = tz;
         }
     }
 
     private unsafe void CreateObject()
     {
-        Vertex[] vertices = _mesh.Vertices
-            .Select(vx => new Vertex(
-                vx.Position.X, vx.Position.Y, vx.Position.Z,
-                vx.TexCoord.X, vx.TexCoord.Y,
-                vx.Normal.X, vx.Normal.Y, vx.Normal.Z))
-            .ToArray();
+        Vertex[] vertices = BuildVerticesWithTangents(_mesh.Vertices);
 
         GL.GenVertexArrays(1, out _vao);
         GL.BindVertexArray(_vao);
@@ -441,8 +503,107 @@ public sealed class MainForm : Form
             GL.BufferData(GL.GL_ARRAY_BUFFER, (nint)(vertices.Length * sizeof(Vertex)), (IntPtr)p, GL.GL_STATIC_DRAW);
         }
 
-        int stride = sizeof(Vertex);
+        SetupVertexAttributes(sizeof(Vertex));
 
+        GL.BindVertexArray(0);
+        GL.BindBuffer(GL.GL_ARRAY_BUFFER, 0);
+    }
+
+    private static Vertex[] BuildVerticesWithTangents(ObjVertex[] source)
+    {
+        var vertices = new Vertex[source.Length];
+        var tangents = new Vector3[source.Length];
+
+        for (int i = 0; i + 2 < source.Length; i += 3)
+        {
+            Vector3 p0 = source[i + 0].Position;
+            Vector3 p1 = source[i + 1].Position;
+            Vector3 p2 = source[i + 2].Position;
+
+            Vector2 uv0 = source[i + 0].TexCoord;
+            Vector2 uv1 = source[i + 1].TexCoord;
+            Vector2 uv2 = source[i + 2].TexCoord;
+
+            Vector3 e1 = p1 - p0;
+            Vector3 e2 = p2 - p0;
+            Vector2 duv1 = uv1 - uv0;
+            Vector2 duv2 = uv2 - uv0;
+
+            float denom = duv1.X * duv2.Y - duv2.X * duv1.Y;
+            Vector3 tangent;
+
+            if (Math.Abs(denom) > 1e-6f)
+            {
+                float f = 1.0f / denom;
+                tangent = (e1 * duv2.Y - e2 * duv1.Y) * f;
+            }
+            else
+            {
+                tangent = Math.Abs(source[i].Normal.Y) < 0.9f
+                    ? Vector3.Cross(Vector3.UnitY, source[i].Normal)
+                    : Vector3.Cross(Vector3.UnitX, source[i].Normal);
+            }
+
+            if (tangent.LengthSquared() < 1e-8f || float.IsNaN(tangent.X))
+                tangent = Vector3.UnitX;
+            else
+                tangent = Vector3.Normalize(tangent);
+
+            tangents[i + 0] = tangent;
+            tangents[i + 1] = tangent;
+            tangents[i + 2] = tangent;
+        }
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            ObjVertex vx = source[i];
+            Vector3 t = tangents[i].LengthSquared() > 0.0f ? tangents[i] : Vector3.UnitX;
+
+            vertices[i] = new Vertex(
+                vx.Position.X, vx.Position.Y, vx.Position.Z,
+                vx.TexCoord.X, vx.TexCoord.Y,
+                vx.Normal.X, vx.Normal.Y, vx.Normal.Z,
+                t.X, t.Y, t.Z);
+        }
+
+        return vertices;
+    }
+
+    private unsafe void CreateFloor()
+    {
+        const float s = 55.0f;
+        const float zOffset = -3.0f;
+
+        Vertex[] vertices =
+        {
+            new(-s, FloorY, -s + zOffset, 0, 0, 0, 1, 0, 1, 0, 0),
+            new( s, FloorY, -s + zOffset, 1, 0, 0, 1, 0, 1, 0, 0),
+            new( s, FloorY,  s + zOffset, 1, 1, 0, 1, 0, 1, 0, 0),
+
+            new(-s, FloorY, -s + zOffset, 0, 0, 0, 1, 0, 1, 0, 0),
+            new( s, FloorY,  s + zOffset, 1, 1, 0, 1, 0, 1, 0, 0),
+            new(-s, FloorY,  s + zOffset, 0, 1, 0, 1, 0, 1, 0, 0),
+        };
+
+        GL.GenVertexArrays(1, out _floorVao);
+        GL.BindVertexArray(_floorVao);
+
+        GL.GenBuffers(1, out _floorVbo);
+        GL.BindBuffer(GL.GL_ARRAY_BUFFER, _floorVbo);
+
+        fixed (Vertex* p = vertices)
+        {
+            GL.BufferData(GL.GL_ARRAY_BUFFER, (nint)(vertices.Length * sizeof(Vertex)), (IntPtr)p, GL.GL_STATIC_DRAW);
+        }
+
+        SetupVertexAttributes(sizeof(Vertex));
+
+        GL.BindVertexArray(0);
+        GL.BindBuffer(GL.GL_ARRAY_BUFFER, 0);
+    }
+
+    private static void SetupVertexAttributes(int stride)
+    {
         GL.VertexAttribPointer(0, 3, GL.GL_FLOAT, false, stride, Marshal.OffsetOf<Vertex>(nameof(Vertex.px)));
         GL.EnableVertexAttribArray(0);
 
@@ -452,8 +613,8 @@ public sealed class MainForm : Form
         GL.VertexAttribPointer(2, 3, GL.GL_FLOAT, false, stride, Marshal.OffsetOf<Vertex>(nameof(Vertex.nx)));
         GL.EnableVertexAttribArray(2);
 
-        GL.BindVertexArray(0);
-        GL.BindBuffer(GL.GL_ARRAY_BUFFER, 0);
+        GL.VertexAttribPointer(3, 3, GL.GL_FLOAT, false, stride, Marshal.OffsetOf<Vertex>(nameof(Vertex.tx)));
+        GL.EnableVertexAttribArray(3);
     }
 
     private unsafe void RenderFrame()
@@ -464,15 +625,17 @@ public sealed class MainForm : Form
         long now = Stopwatch.GetTimestamp();
         float dt = (float)(now - _lastTicks) / Stopwatch.Frequency;
         _lastTicks = now;
+        _time += dt;
 
-        _autoRotY += dt * 0.8f;
+        if (_autoRotate)
+            _autoRotY += dt * 0.55f;
 
         GL.Viewport(0, 0, ClientSize.Width, ClientSize.Height);
         GL.Clear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT);
 
         float aspect = (float)ClientSize.Width / ClientSize.Height;
 
-        Mat4 proj = Mat4.Perspective(60.0f * MathF.PI / 180.0f, aspect, 0.1f, 200.0f);
+        Mat4 proj = Mat4.Perspective(60.0f * MathF.PI / 180.0f, aspect, 0.1f, 220.0f);
         Mat4 view = Mat4.Translation(0.0f, 0.0f, -_zoom);
         Mat4 rotY = Mat4.RotationY(_rotY + _autoRotY);
         Mat4 rotX = Mat4.RotationX(_rotX);
@@ -481,13 +644,9 @@ public sealed class MainForm : Form
         float centerY = -5;
         float centerZ = 10;
         Mat4 toOrigin = Mat4.Translation(-centerX, -centerY, -centerZ);
-        Mat4 toWorld = Mat4.Translation(0.0f, 0.0f, 0.0f);
-        Mat4 model = Mat4.Multiply(toWorld, Mat4.Multiply(rotation, toOrigin));
+        Mat4 model = Mat4.Multiply(rotation, toOrigin);
 
         GL.UseProgram(_program);
-
-        fixed (float* pModel = model.M)
-            GL.UniformMatrix4fv(_uModel, 1, false, (IntPtr)pModel);
 
         fixed (float* pView = view.M)
             GL.UniformMatrix4fv(_uView, 1, false, (IntPtr)pView);
@@ -496,26 +655,83 @@ public sealed class MainForm : Form
             GL.UniformMatrix4fv(_uProj, 1, false, (IntPtr)pProj);
 
         if (_lightDirIncreasing)
-            _lightDirX += 0.01f;
+            _lightDirX += dt * 0.9f;
         else
-            _lightDirX -= 0.01f;
+            _lightDirX -= dt * 0.9f;
 
         if (_lightDirIncreasing && _lightDirX > 2.0f)
             _lightDirIncreasing = false;
         else if (!_lightDirIncreasing && _lightDirX < -2.0f)
             _lightDirIncreasing = true;
 
-        GL.Uniform3f(_uLightDir, _lightDirX, 0.0f, -2.0f);
+        GL.Uniform3f(_uLightDir, _lightDirX, -0.45f, -2.0f);
         GL.Uniform3f(_uViewPos, 0.0f, 0.0f, _zoom);
+        GL.Uniform1fSafe(_uTime, _time);
+        GL.Uniform1fSafe(_uEffectMix, _effectsEnabled ? 1.0f : 0.0f);
+        GL.Uniform1fSafe(_uFloorY, FloorY);
 
         GL.ActiveTexture(GL.GL_TEXTURE0);
         GL.BindTexture(GL.GL_TEXTURE_2D, _diffuseTexture);
         GL.Uniform1i(_uDiffuse, 0);
 
+        GL.ActiveTexture(GL.GL_TEXTURE1);
+        GL.BindTexture(GL.GL_TEXTURE_2D, _normalTexture);
+        GL.Uniform1i(_uNormalMap, 1);
+
+        GL.Enable(GL.GL_CULL_FACE);
+        GL.DepthMask(true);
+        GL.Disable(GL.GL_BLEND);
+        DrawModel(model, mirrorPass: false, alpha: 1.0f);
+
+        if (_mirrorEnabled)
+        {
+            Mat4 reflected = Mat4.Multiply(
+                Mat4.Multiply(Mat4.Translation(0.0f, FloorY * 2.0f, 0.0f), Mat4.Scale(1.0f, -1.0f, 1.0f)),
+                model);
+
+            GL.Enable(GL.GL_BLEND);
+            GL.BlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA);
+            GL.DepthMask(false);
+            GL.Disable(GL.GL_CULL_FACE);
+            DrawModel(reflected, mirrorPass: true, alpha: 1.0f);
+
+            DrawFloor();
+
+            GL.DepthMask(true);
+            GL.Disable(GL.GL_BLEND);
+            GL.Enable(GL.GL_CULL_FACE);
+        }
+
+        Native.SwapBuffers(_hdc);
+    }
+
+    private unsafe void DrawModel(Mat4 model, bool mirrorPass, float alpha)
+    {
+        GL.Uniform1i(_uRenderMode, 0);
+        GL.Uniform1i(_uMirrorPass, mirrorPass ? 1 : 0);
+        GL.Uniform1fSafe(_uObjectAlpha, alpha);
+
+        fixed (float* pModel = model.M)
+            GL.UniformMatrix4fv(_uModel, 1, false, (IntPtr)pModel);
+
         GL.BindVertexArray(_vao);
         GL.DrawArrays(GL.GL_TRIANGLES, 0, _mesh.Vertices.Length);
         GL.BindVertexArray(0);
+    }
 
-        Native.SwapBuffers(_hdc);
+    private unsafe void DrawFloor()
+    {
+        Mat4 identity = Mat4.Identity();
+
+        GL.Uniform1i(_uRenderMode, 1);
+        GL.Uniform1i(_uMirrorPass, 0);
+        GL.Uniform1fSafe(_uObjectAlpha, 1.0f);
+
+        fixed (float* pModel = identity.M)
+            GL.UniformMatrix4fv(_uModel, 1, false, (IntPtr)pModel);
+
+        GL.BindVertexArray(_floorVao);
+        GL.DrawArrays(GL.GL_TRIANGLES, 0, 6);
+        GL.BindVertexArray(0);
     }
 }
