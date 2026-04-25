@@ -21,7 +21,7 @@ This is not hardware ray tracing. It is still classic rasterization, but the sha
 
 ## Screenshot
 
-![Screenshot](screenshots/screenshot.png)
+![Screenshot](screenshots/screenshot1.png)
 
 ## Controls
 
