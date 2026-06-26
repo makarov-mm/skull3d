@@ -55,3 +55,9 @@ The project expects these files to be copied to the output directory:
 - `shaders/skull.frag`
 
 The `.csproj` already contains `CopyToOutputDirectory` entries for them.
+
+## Support
+
+If you found this project interesting or useful, you can support my work:
+
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/makarov-mm?style=flat&logo=github)](https://github.com/sponsors/makarov-mm)
