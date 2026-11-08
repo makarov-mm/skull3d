@@ -5,7 +5,7 @@ namespace Skull3d;
 
 public static class Texture
 {
-    public static unsafe uint LoadTextureFromFile(string path)
+    public static uint LoadTextureFromFile(string path)
     {
         using Bitmap original = new Bitmap(path);
         using Bitmap bmp = new Bitmap(original.Width, original.Height, PixelFormat.Format32bppArgb);
@@ -24,9 +24,9 @@ public static class Texture
         using Bitmap original = new Bitmap(path);
         using Bitmap bmp = new Bitmap(original.Width, original.Height, PixelFormat.Format32bppArgb);
 
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (Graphics gfx = Graphics.FromImage(bmp))
         {
-            g.DrawImage(original, 0, 0, original.Width, original.Height);
+            gfx.DrawImage(original, 0, 0, original.Width, original.Height);
         }
 
         byte[] rgba = ReadRgba(bmp);
@@ -84,6 +84,7 @@ public static class Texture
             for (int y = 0; y < bmp.Height; y++)
             {
                 byte* srcRow = srcBase + y * data.Stride;
+
                 for (int x = 0; x < bmp.Width; x++)
                 {
                     byte b = srcRow[x * 4 + 0];
@@ -131,7 +132,9 @@ public static class Texture
         }
 
         if (mipmaps)
+        {
             GL.GenerateMipmap(GL.GL_TEXTURE_2D);
+        }
 
         GL.BindTexture(GL.GL_TEXTURE_2D, 0);
         return tex;

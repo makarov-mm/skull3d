@@ -74,11 +74,6 @@ public static class ObjLoader
                         vertices.Add(ParseFaceVertex(parts[i + 1], positions, texCoords, normals));
                     }
                     break;
-
-                    vertices.Add(ParseFaceVertex(parts[1], positions, texCoords, normals));
-                    vertices.Add(ParseFaceVertex(parts[2], positions, texCoords, normals));
-                    vertices.Add(ParseFaceVertex(parts[3], positions, texCoords, normals));
-                    break;
             }
         }
 
@@ -143,7 +138,6 @@ public static class ObjLoader
 
     private static string? LoadDiffuseTextureFromMtl(string mtlPath, string? targetMaterial)
     {
-        string? currentMaterial = null;
         bool inTarget = targetMaterial == null;
 
         foreach (string rawLine in File.ReadAllLines(mtlPath))
@@ -154,13 +148,14 @@ public static class ObjLoader
                 continue;
 
             string[] parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+
             if (parts.Length == 0)
                 continue;
 
             switch (parts[0])
             {
                 case "newmtl":
-                    currentMaterial = parts.Length >= 2 ? parts[1] : null;
+                    string? currentMaterial = parts.Length >= 2 ? parts[1] : null;
                     inTarget = targetMaterial == null || currentMaterial == targetMaterial;
                     break;
 
@@ -174,6 +169,5 @@ public static class ObjLoader
         return null;
     }
 
-    private static float ParseFloat(string s) =>
-        float.Parse(s, CultureInfo.InvariantCulture);
+    private static float ParseFloat(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 }

@@ -28,9 +28,10 @@ internal static class WGL
     private static T LoadDelegate<T>(string name) where T : Delegate
     {
         IntPtr p = Native.GetGLProcAddress(name);
-        if (p == IntPtr.Zero)
-            throw new Exception($"Failed to load {name}");
-        return Marshal.GetDelegateForFunctionPointer<T>(p);
+
+        return p == IntPtr.Zero 
+            ? throw new Exception($"Failed to load {name}") 
+            : Marshal.GetDelegateForFunctionPointer<T>(p);
     }
 
     private static T? TryLoadDelegate<T>(string name) where T : Delegate

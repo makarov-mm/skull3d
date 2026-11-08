@@ -7,6 +7,7 @@ public struct Mat4
     public Mat4(bool identity)
     {
         M = new float[16];
+
         if (identity)
         {
             M[0] = 1.0f;
@@ -16,7 +17,7 @@ public struct Mat4
         }
     }
 
-    public static Mat4 Identity() => new Mat4(true);
+    public static Mat4 Identity() => new(true);
 
     public static Mat4 Perspective(float fovYRadians, float aspect, float zNear, float zFar)
     {
@@ -34,7 +35,7 @@ public struct Mat4
 
     public static Mat4 Translation(float x, float y, float z)
     {
-        var r = Identity();
+        Mat4 r = Identity();
         r.M[12] = x;
         r.M[13] = y;
         r.M[14] = z;
@@ -43,7 +44,7 @@ public struct Mat4
 
     public static Mat4 Scale(float x, float y, float z)
     {
-        var r = Identity();
+        Mat4 r = Identity();
         r.M[0] = x;
         r.M[5] = y;
         r.M[10] = z;
@@ -52,7 +53,7 @@ public struct Mat4
 
     public static Mat4 RotationX(float a)
     {
-        var r = Identity();
+        Mat4 r = Identity();
         float c = MathF.Cos(a);
         float s = MathF.Sin(a);
 
@@ -66,7 +67,7 @@ public struct Mat4
 
     public static Mat4 RotationY(float a)
     {
-        var r = Identity();
+        Mat4 r = Identity();
         float c = MathF.Cos(a);
         float s = MathF.Sin(a);
 

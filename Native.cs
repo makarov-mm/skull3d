@@ -127,11 +127,13 @@ internal static class Native
     public static IntPtr GetGLProcAddress(string name)
     {
         IntPtr p = wglGetProcAddress(name);
+
         if (p == IntPtr.Zero || p == (IntPtr)1 || p == (IntPtr)2 || p == (IntPtr)3 || p == (IntPtr)(-1))
         {
             IntPtr mod = LoadLibrary("opengl32.dll");
             p = GetProcAddress(mod, name);
         }
+
         return p;
     }
 }
